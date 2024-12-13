@@ -1,7 +1,7 @@
 -- Copyright 3bian Limited and CHERIoT Contributors.
 -- SPDX-License-Identifier: Apache-2.0
 
-set_project("Empty Project template")
+set_project("Ethernet Harness")
 
 sdkdir = "third_party/cheriot_rtos/sdk"
 set_toolchains("cheriot-clang")
@@ -13,11 +13,13 @@ option("board")
     set_default("sonata")
 
 compartment("entry_point")
-    add_deps("debug",
-             "freestanding")
+    set_default(false)
+    add_deps("freestanding",
+             "debug")
+    add_includedirs("include")
     add_files("src/main.cc")
 
-firmware("empty-project")
+firmware("ethernet-harness")
     add_deps("entry_point")
     on_load(function(target)
         target:values_set("board", "$(board)")
@@ -26,8 +28,8 @@ firmware("empty-project")
                 compartment = "entry_point",
                 priority = 1,
                 entry_point = "init",
-                stack_size = 0x200,
-                trusted_stack_frames = 1
+                stack_size = 0x1000,
+                trusted_stack_frames = 5
             }
         }, {expand = false})
     end)
