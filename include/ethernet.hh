@@ -27,7 +27,7 @@ class Ksz8851Ethernet
 	/**
 	 * Flag set when we're debugging this driver.
 	 */
-	static constexpr bool DebugEthernet = false;
+	static constexpr bool DebugEthernet = true;
 
 	/**
 	 * Flag set to log messages when frames are dropped.
@@ -496,8 +496,11 @@ class Ksz8851Ethernet
 					RegisterOffset::ReceiveControl1,
 					ReceiveControl1::ReceiveEnable |
 					ReceiveControl1::ReceiveInverseFilter |
-					ReceiveControl1::ReceiveAllEnable);
-	
+					ReceiveControl1::ReceiveAllEnable |
+					ReceiveControl1::ReceiveIpFrameChecksumCheckEnable |
+					ReceiveControl1::ReceiveTcpFrameChecksumCheckEnable |
+					ReceiveControl1::ReceiveUdpFrameChecksumCheckEnable);
+
 		// The frame data burst field in this register controls how many data
 		// from a frame is read per DMA operation. The programmer's guide has a
 		// 4 byte burst, but to reduce SPI transactions and improve performance
