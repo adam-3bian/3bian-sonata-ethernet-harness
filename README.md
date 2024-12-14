@@ -1,22 +1,50 @@
 ## IPv6 Ethernet Harness
 
-Contains experimental code for testing and extending network functionality. This is certainly not production code.
+Contains experimental code for testing and extending network functionality.
 
----
+**Note:** This is not intended as production-ready code.
+
+### Current Parsing Paths
+
+```
+Ethernet Header
+├── IPv4 Header
+│   ├── UDP Header
+│   │   └── DHCPv6 Header
+│   └── Unknown Protocol
+├── IPv6 Header
+│   ├── UDP Header
+│   │   └── DHCPv6 Header
+│   ├── ICMPv6 Header
+│   └── Unknown Next Header
+├── ARP Header
+│   ├── IPv4 ARP Header
+│   ├── IPv6 ARP Header
+│   └── Unknown Protocol Type
+├── VLAN Header
+│   ├── Double VLAN Header
+│   │   ├── IPv4 Header
+│   │   ├── IPv6 Header
+│   │   ├── ARP Header
+│   │   └── Unknown EtherType
+│   ├── IPv4 Header
+│   ├── IPv6 Header
+│   ├── ARP Header
+│   └── Unknown EtherType
+├── Double VLAN Header
+│   ├── IPv4 Header
+│   ├── IPv6 Header
+│   ├── ARP Header
+│   └── Unknown EtherType
+└── Unknown EtherType
+```
 
 ### Prepare the Environment
 
 ```
-# Install the virtual environment
 python3 -m venv .venv
-
-# Enter the virtual environment
 . .venv/bin/activate
-
-# Install python3 requirements
 python3 -m pip3 install -r requirements.txt
-
-# Exit the virtual environment
 deactivate
 ```
 
@@ -25,18 +53,9 @@ deactivate
 Assuming LLVM build files are in /cheriot-tools/bin.
 
 ```
-# Enter the virtual environment
 . .venv/bin/activate
-
-# Configure cheriot-tools path
 xmake config --sdk=/cheriot-tools
-
-# Build the project
 xmake
-
-# Create firmware.uf2
 xmake run
-
-# Exit the virtual environment
 deactivate
 ```
