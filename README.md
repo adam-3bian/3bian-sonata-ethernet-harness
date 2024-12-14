@@ -9,13 +9,19 @@ Contains experimental code for testing and extending network functionality.
 ```
 Ethernet Header
 ├── IPv4 Header
+│   ├── TCP Header
 │   ├── UDP Header
 │   │   └── DHCPv6 Header
+│   ├── ICMP Header
+│   ├── IGMP Header
 │   └── Unknown Protocol
 ├── IPv6 Header
+│   ├── TCP Header
 │   ├── UDP Header
 │   │   └── DHCPv6 Header
 │   ├── ICMPv6 Header
+│   │   ├── Router Solicitation
+│   │   └── Router Advertisement
 │   └── Unknown Next Header
 ├── ARP Header
 │   ├── IPv4 ARP Header
