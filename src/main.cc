@@ -10,85 +10,9 @@
 using Debug = ConditionalDebug<true, "Ethernet harness">;
 
 // ============================
-// Enumerations
+// Network to Host Conversions
 // ============================
 
-// EtherType Enumeration
-enum class EtherType : uint16_t
-{
-    VLAN = 0x8100,
-    QinQ = 0x88A8,
-    ARP = 0x0806,
-    IPv6 = 0x86DD
-};
-
-// ProtocolType Enumeration for ARP
-enum class ProtocolType : uint16_t
-{
-    IPv4 = 0x0800
-};
-
-// ICMPv6 Option Types Enumeration
-enum class ICMPv6OptionType : uint8_t
-{
-    SourceLinkLayerAddress = 1,
-    TargetLinkLayerAddress = 2,
-    PrefixInformation = 3
-};
-
-// ICMPv6 Message Types Enumeration
-enum class ICMPv6Type : uint8_t
-{
-    NeighborSolicitation = 135,
-    NeighborAdvertisement = 136,
-    RouterSolicitation = 133,
-    RouterAdvertisement = 134
-};
-
-// ARP Opcode Enumeration
-enum class ARPOpcode : uint16_t
-{
-    Request = 1,
-    Reply = 2
-};
-
-// ============================
-// Global Constants
-// ============================
-
-// Ethernet Constants
-constexpr size_t EthernetHeaderLength = 14;
-
-// VLAN Constants
-constexpr size_t VlanHeaderLength = 4;
-constexpr size_t MaxVlanTags = 4;
-
-// ICMPv6 Next Header Value
-constexpr uint8_t ICMPv6NextHeader = 58;
-
-// ICMPv6 Option Lengths
-constexpr size_t ICMPv6OptionLengthSourceLinkLayerAddress = 8;
-constexpr size_t ICMPv6OptionLengthTargetLinkLayerAddress = 8;
-constexpr size_t ICMPv6OptionLengthPrefixInformation = 32;
-constexpr size_t ICMPv6OptionMaxLength = 40;
-
-// ICMPv6 Message Lengths
-constexpr size_t NeighborSolicitationMessageLength = 24;
-constexpr size_t NeighborAdvertisementMessageLength = 24;
-constexpr size_t RouterSolicitationMessageLength = 16;
-constexpr size_t RouterAdvertisementMessageLength = 16;
-
-// IPv6 Constants
-constexpr size_t IPv6HeaderLength = 40;
-
-// ARP Constants
-constexpr size_t ARPPayloadLength = 28;
-
-// ============================
-// Endian Conversion Functions
-// ============================
-
-// Converts a 32-bit value from network byte order to host byte order
 uint32_t constexpr ntohl(uint32_t value)
 {
 #ifdef __LITTLE_ENDIAN__
@@ -98,7 +22,6 @@ uint32_t constexpr ntohl(uint32_t value)
 #endif
 }
 
-// Converts a 16-bit value from network byte order to host byte order
 uint16_t constexpr ntohs(uint16_t value)
 {
 #ifdef __LITTLE_ENDIAN__
@@ -109,420 +32,535 @@ uint16_t constexpr ntohs(uint16_t value)
 }
 
 // ============================
-// ICMPv6 Option Parsing
+// Ethernet
 // ============================
 
-static bool parse_icmpv6_options(const uint8_t *frameData, size_t frameLength, size_t offset, size_t end)
+void parse_ethernet_header(uint8_t *frame, uint16_t frameLength);
+void parse_vlan_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_double_vlan_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_arp_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_ipv4_arp_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_ipv6_arp_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_ipv4_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_ipv6_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_udp_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_dhcp6_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_icmpv6_header(uint8_t *remaining, uint16_t remainingLength);
+
+void parse_ethernet_header(uint8_t *frame, uint16_t frameLength)
 {
-    constexpr size_t optionLengthUnit = 8; // Number of bytes per unit
-
-    while (offset < end)
+    if (frameLength < 14)
     {
-        if (offset + 2 > end)
-        {
-            Debug::log("ICMPv6 Option truncated.");
-            return false;
-        }
-
-        uint8_t optionType = frameData[offset];
-        uint8_t optionLength = frameData[offset + 1]; // Length in 8-octet units
-        size_t optionTotalLength = static_cast<size_t>(optionLength) * optionLengthUnit;
-
-        if (optionLength == 0 || optionTotalLength > ICMPv6OptionMaxLength || offset + optionTotalLength > end)
-        {
-            Debug::log("ICMPv6 Option truncated or exceeds maximum allowed length.");
-            return false;
-        }
-
-        if (optionType == static_cast<uint8_t>(ICMPv6OptionType::SourceLinkLayerAddress)) // Source Link-Layer
-                                                                                          // Address
-        {
-            if (optionTotalLength < ICMPv6OptionLengthSourceLinkLayerAddress)
-            {
-                Debug::log("Invalid Source Link-Layer Address option length.");
-                return false;
-            }
-            uint8_t sourceMacAddressBytes[6];
-            std::memcpy(sourceMacAddressBytes, frameData + offset + 2, 6);
-
-            Debug::log("ICMPv6 Source Link-Layer Address={}:{}:{}:{}:{}:{}", sourceMacAddressBytes[0],
-                       sourceMacAddressBytes[1], sourceMacAddressBytes[2], sourceMacAddressBytes[3],
-                       sourceMacAddressBytes[4], sourceMacAddressBytes[5]);
-        }
-        else if (optionType ==
-                 static_cast<uint8_t>(ICMPv6OptionType::TargetLinkLayerAddress)) // Target Link-Layer Address
-        {
-            if (optionTotalLength < ICMPv6OptionLengthTargetLinkLayerAddress)
-            {
-                Debug::log("Invalid Target Link-Layer Address option length.");
-                return false;
-            }
-            uint8_t targetMacAddressBytes[6];
-            std::memcpy(targetMacAddressBytes, frameData + offset + 2, 6);
-
-            Debug::log("ICMPv6 Target Link-Layer Address={}:{}:{}:{}:{}:{}", targetMacAddressBytes[0],
-                       targetMacAddressBytes[1], targetMacAddressBytes[2], targetMacAddressBytes[3],
-                       targetMacAddressBytes[4], targetMacAddressBytes[5]);
-        }
-        else if (optionType == static_cast<uint8_t>(ICMPv6OptionType::PrefixInformation)) // Prefix Information
-        {
-            if (optionTotalLength < ICMPv6OptionLengthPrefixInformation)
-            {
-                Debug::log("Invalid Prefix Information option length.");
-                return false;
-            }
-            uint8_t prefixLength = frameData[offset + 2];
-            uint8_t flags = frameData[offset + 3];
-            uint32_t validLifetime = ntohl(*reinterpret_cast<const uint32_t *>(frameData + offset + 4));
-            uint32_t preferredLifetime = ntohl(*reinterpret_cast<const uint32_t *>(frameData + offset + 8));
-            // uint32_t reserved = ntohl(*reinterpret_cast<const uint32_t*>(frameData
-            // + offset + 12));
-
-            uint16_t prefixAddressParts[8];
-            for (int i = 0; i < 8; ++i)
-            {
-                size_t addrOffset = offset + 16 + i * 2;
-                prefixAddressParts[i] = ntohs(*reinterpret_cast<const uint16_t *>(frameData + addrOffset));
-            }
-
-            Debug::log("ICMPv6 Prefix Information: PrefixLength={}, Flags={}, "
-                       "ValidLifetime={}, PreferredLifetime={}, "
-                       "Prefix={}:{}:{}:{}:{}:{}:{}:{}",
-                       prefixLength, flags, validLifetime, preferredLifetime, prefixAddressParts[0],
-                       prefixAddressParts[1], prefixAddressParts[2], prefixAddressParts[3], prefixAddressParts[4],
-                       prefixAddressParts[5], prefixAddressParts[6], prefixAddressParts[7]);
-        }
-        else // Unknown Option Type
-        {
-            Debug::log("ICMPv6 Unknown Option Type={}", optionType);
-        }
-
-        offset += optionTotalLength;
-    }
-    return true;
-}
-
-// ============================
-// ICMPv6 Parsing
-// ============================
-
-static bool parse_icmpv6_neighbor_solicitation(const uint8_t *frameData, size_t frameLength, size_t offset, size_t end)
-{
-    if (end - offset < NeighborSolicitationMessageLength)
-    {
-        Debug::log("ICMPv6 Neighbor Solicitation message truncated.");
-        return false;
+        Debug::log("Frame too short for Ethernet header: {}", frameLength);
+        return; // Not enough length for Ethernet header
     }
 
-    uint16_t targetAddressParts[8];
-    for (int i = 0; i < 8; ++i)
-    {
-        size_t addrOffset = offset + 8 + i * 2;
-        targetAddressParts[i] = ntohs(*reinterpret_cast<const uint16_t *>(frameData + addrOffset));
-    }
-
-    Debug::log("ICMPv6 Neighbor Solicitation: Target Address={}:{}:{}:{}:{}:{}:{}:{}", targetAddressParts[0],
-               targetAddressParts[1], targetAddressParts[2], targetAddressParts[3], targetAddressParts[4],
-               targetAddressParts[5], targetAddressParts[6], targetAddressParts[7]);
-
-    size_t optionsOffset = offset + NeighborSolicitationMessageLength;
-    return parse_icmpv6_options(frameData, frameLength, optionsOffset, end);
-}
-
-static bool parse_icmpv6_neighbor_advertisement(const uint8_t *frameData, size_t frameLength, size_t offset, size_t end)
-{
-    if (end - offset < NeighborAdvertisementMessageLength)
-    {
-        Debug::log("ICMPv6 Neighbor Advertisement message truncated.");
-        return false;
-    }
-
-    uint32_t flags = ntohl(*reinterpret_cast<const uint32_t *>(frameData + offset + 4));
-
-    uint16_t targetAddressParts[8];
-    for (int i = 0; i < 8; ++i)
-    {
-        size_t addrOffset = offset + 8 + i * 2;
-        targetAddressParts[i] = ntohs(*reinterpret_cast<const uint16_t *>(frameData + addrOffset));
-    }
-
-    Debug::log("ICMPv6 Neighbor Advertisement: Target "
-               "Address={}:{}:{}:{}:{}:{}:{}:{}, Flags={}",
-               targetAddressParts[0], targetAddressParts[1], targetAddressParts[2], targetAddressParts[3],
-               targetAddressParts[4], targetAddressParts[5], targetAddressParts[6], targetAddressParts[7], flags);
-
-    size_t optionsOffset = offset + NeighborAdvertisementMessageLength;
-    return parse_icmpv6_options(frameData, frameLength, optionsOffset, end);
-}
-
-static bool parse_icmpv6_router_solicitation(const uint8_t *frameData, size_t frameLength, size_t offset, size_t end)
-{
-    if (end - offset < RouterSolicitationMessageLength)
-    {
-        Debug::log("ICMPv6 Router Solicitation message truncated.");
-        return false;
-    }
-
-    Debug::log("ICMPv6 Router Solicitation");
-
-    size_t optionsOffset = offset + RouterSolicitationMessageLength;
-    return parse_icmpv6_options(frameData, frameLength, optionsOffset, end);
-}
-
-static bool parse_icmpv6_router_advertisement(const uint8_t *frameData, size_t frameLength, size_t offset, size_t end)
-{
-    if (end - offset < RouterAdvertisementMessageLength)
-    {
-        Debug::log("ICMPv6 Router Advertisement message truncated.");
-        return false;
-    }
-
-    uint8_t currentHopLimit = frameData[offset + 4];
-    uint8_t flags = frameData[offset + 5];
-    uint16_t routerLifetime = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 6));
-    uint32_t reachableTime = ntohl(*reinterpret_cast<const uint32_t *>(frameData + offset + 8));
-    uint32_t retransTimer = ntohl(*reinterpret_cast<const uint32_t *>(frameData + offset + 12));
-
-    Debug::log("ICMPv6 Router Advertisement: Current Hop Limit={}, Flags={}, "
-               "Router Lifetime={}, Reachable Time={}, Retrans Timer={}",
-               currentHopLimit, flags, routerLifetime, reachableTime, retransTimer);
-
-    size_t optionsOffset = offset + RouterAdvertisementMessageLength;
-    return parse_icmpv6_options(frameData, frameLength, optionsOffset, end);
-}
-
-static bool parse_icmpv6(const uint8_t *frameData, size_t frameLength, size_t offset)
-{
-    if (offset + 8 > frameLength)
-    {
-        Debug::log("ICMPv6 header truncated.");
-        return false;
-    }
-
-    uint8_t type = frameData[offset];
-    uint8_t code = frameData[offset + 1];
-    uint16_t checksum = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 2));
-    // uint32_t reserved = ntohl(*reinterpret_cast<const uint32_t*>(frameData +
-    // offset + 4));
-
-    Debug::log("ICMPv6 Type={}, Code={}, Checksum={}", type, code, checksum);
-
-    size_t messageOffset = offset + 8;
-    size_t end = frameLength;
-
-    if (type == static_cast<uint8_t>(ICMPv6Type::NeighborSolicitation)) // Neighbor Solicitation
-    {
-        return parse_icmpv6_neighbor_solicitation(frameData, frameLength, messageOffset, end);
-    }
-    else if (type == static_cast<uint8_t>(ICMPv6Type::NeighborAdvertisement)) // Neighbor Advertisement
-    {
-        return parse_icmpv6_neighbor_advertisement(frameData, frameLength, messageOffset, end);
-    }
-    else if (type == static_cast<uint8_t>(ICMPv6Type::RouterSolicitation)) // Router Solicitation
-    {
-        return parse_icmpv6_router_solicitation(frameData, frameLength, messageOffset, end);
-    }
-    else if (type == static_cast<uint8_t>(ICMPv6Type::RouterAdvertisement)) // Router Advertisement
-    {
-        return parse_icmpv6_router_advertisement(frameData, frameLength, messageOffset, end);
-    }
-    else // Unknown Type
-    {
-        Debug::log("ICMPv6 Unknown Type={}", type);
-    }
-
-    return true;
-}
-
-// ============================
-// IPv6 and Neighbor Discovery
-// ============================
-
-static bool parse_ipv6_neighbor_discovery(const uint8_t *frameData, size_t frameLength, size_t offset)
-{
-    if (frameLength < offset + IPv6HeaderLength)
-    {
-        Debug::log("IPv6 header truncated.");
-        return false;
-    }
-
-    uint16_t payloadLength = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 4));
-    uint8_t nextHeader = frameData[offset + 6];
-    uint8_t hopLimit = frameData[offset + 7];
-
-    Debug::log("IPv6 PayloadLength={}, NextHeader={}, HopLimit={}", payloadLength, nextHeader, hopLimit);
-
-    // ICMPv6 next header = 58
-    if (nextHeader == ICMPv6NextHeader)
-    {
-        size_t icmpv6Offset = offset + IPv6HeaderLength;
-        size_t icmpv6End = icmpv6Offset + payloadLength;
-
-        if (icmpv6End > frameLength)
-        {
-            Debug::log("ICMPv6 payload exceeds frame length.");
-            return false;
-        }
-
-        return parse_icmpv6(frameData, frameLength, icmpv6Offset);
-    }
-    else
-    {
-        Debug::log("Non-ICMPv6 NextHeader={}", nextHeader);
-    }
-
-    return true;
-}
-
-// ============================
-// VLAN Parsing
-// ============================
-
-static bool parse_vlan_header(const uint8_t *frameData, size_t frameLength, size_t &offset, uint16_t &etherType)
-{
-    if (frameLength < offset + VlanHeaderLength + 2) // 4 for VLAN header + 2 for EtherType
-    {
-        Debug::log("VLAN header truncated.");
-        return false;
-    }
-
-    uint16_t tagProtocolIdentifier = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset));
-    uint16_t tagControlInformation = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 2));
-    uint16_t vlanIdentifier = tagControlInformation & 0x0FFF;
-    uint8_t priorityCodePoint = static_cast<uint8_t>((tagControlInformation >> 13) & 0x07);
-    uint8_t dropEligibleIndicator = static_cast<uint8_t>((tagControlInformation >> 12) & 0x01);
-
-    Debug::log("VLAN Tag: TPID={}, PCP={}, DEI={}, VLAN ID={}", tagProtocolIdentifier, priorityCodePoint,
-               dropEligibleIndicator, vlanIdentifier);
-
-    // Encapsulated EtherType
-    etherType = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 4));
-    offset += VlanHeaderLength + 2; // 4 bytes VLAN header + 2 bytes EtherType
-
-    Debug::log("Encapsulated EtherType={}", etherType);
-
-    return true;
-}
-
-// ============================
-// ARP Payload Parsing
-// ============================
-
-static bool parse_arp_payload(const uint8_t *frameData, size_t frameLength, size_t offset)
-{
-    if (frameLength < offset + ARPPayloadLength)
-    {
-        Debug::log("ARP payload truncated.");
-        return false;
-    }
-
-    uint16_t hardwareType = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset));
-    uint16_t protocolType = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 2));
-    uint8_t hardwareSize = frameData[offset + 4];
-    uint8_t protocolSize = frameData[offset + 5];
-    uint16_t opcode = ntohs(*reinterpret_cast<const uint16_t *>(frameData + offset + 6));
-
-    uint8_t senderMacAddressBytes[6];
-    std::memcpy(senderMacAddressBytes, frameData + offset + 8, 6);
-    uint32_t senderIp =
-        (static_cast<uint32_t>(frameData[offset + 14]) << 24) | (static_cast<uint32_t>(frameData[offset + 15]) << 16) |
-        (static_cast<uint32_t>(frameData[offset + 16]) << 8) | static_cast<uint32_t>(frameData[offset + 17]);
-
-    uint8_t targetMacAddressBytes[6];
-    std::memcpy(targetMacAddressBytes, frameData + offset + 18, 6);
-    uint32_t targetIp =
-        (static_cast<uint32_t>(frameData[offset + 24]) << 24) | (static_cast<uint32_t>(frameData[offset + 25]) << 16) |
-        (static_cast<uint32_t>(frameData[offset + 26]) << 8) | static_cast<uint32_t>(frameData[offset + 27]);
-
-    if (hardwareSize != 6 || protocolSize != 4 || protocolType != static_cast<uint16_t>(ProtocolType::IPv4))
-    {
-        Debug::log("Invalid ARP payload parameters.");
-        return false;
-    }
-
-    Debug::log("ARP HardwareType={}, ProtocolType={}, HardwareSize={}, "
-               "ProtocolSize={}, Opcode={}, "
-               "SenderMac={}:{}:{}:{}:{}:{}, SenderIp={}.{}.{}.{}, "
-               "TargetMac={}:{}:{}:{}:{}:{}, TargetIp={}.{}.{}.{}",
-               hardwareType, protocolType, hardwareSize, protocolSize, opcode, senderMacAddressBytes[0],
-               senderMacAddressBytes[1], senderMacAddressBytes[2], senderMacAddressBytes[3], senderMacAddressBytes[4],
-               senderMacAddressBytes[5], (senderIp >> 24) & 0xFF, (senderIp >> 16) & 0xFF, (senderIp >> 8) & 0xFF,
-               senderIp & 0xFF, targetMacAddressBytes[0], targetMacAddressBytes[1], targetMacAddressBytes[2],
-               targetMacAddressBytes[3], targetMacAddressBytes[4], targetMacAddressBytes[5], (targetIp >> 24) & 0xFF,
-               (targetIp >> 16) & 0xFF, (targetIp >> 8) & 0xFF, targetIp & 0xFF);
-
-    return true;
-}
-
-// ============================
-// Ethernet Frame Parsing
-// ============================
-
-static bool parse_ethernet_header(const uint8_t *frameData, size_t frameLength)
-{
-    size_t offset = 0;
-    uint8_t destinationMacAddressBytes[6];
-    uint8_t sourceMacAddressBytes[6];
+    uint8_t destinationHardwareAddress[6];
+    uint8_t sourceHardwareAddress[6];
     uint16_t etherType;
 
-    if (frameLength < EthernetHeaderLength)
+    memcpy(destinationHardwareAddress, frame, 6);
+    memcpy(sourceHardwareAddress, frame + 6, 6);
+    memcpy(&etherType, frame + 12, 2);
+
+    etherType = ntohs(etherType);
+
+    Debug::log("EtherType: {}", etherType);
+    Debug::log("Destination Hardware Address: {}:{}:{}:{}:{}:{}",
+               destinationHardwareAddress[0], destinationHardwareAddress[1], destinationHardwareAddress[2],
+               destinationHardwareAddress[3], destinationHardwareAddress[4], destinationHardwareAddress[5]);
+    Debug::log("Source Hardware Address: {}:{}:{}:{}:{}:{}",
+               sourceHardwareAddress[0], sourceHardwareAddress[1], sourceHardwareAddress[2],
+               sourceHardwareAddress[3], sourceHardwareAddress[4], sourceHardwareAddress[5]);
+
+    if (etherType == 0x0800) // IPv4
     {
-        Debug::log("Ethernet frame too short.");
-        return false;
+        Debug::log("Parsing IPv4 header");
+        parse_ipv4_header(frame + 14, frameLength - 14);
     }
-
-    std::memcpy(destinationMacAddressBytes, frameData, 6);
-    std::memcpy(sourceMacAddressBytes, frameData + 6, 6);
-
-    // Manually assemble EtherType using ntohs
-    etherType = ntohs(*reinterpret_cast<const uint16_t *>(frameData + 12));
-
-    offset += EthernetHeaderLength;
-
-    Debug::log("Ethernet DestinationMac={}:{}:{}:{}:{}:{}, "
-               "SourceMac={}:{}:{}:{}:{}:{}, EtherType={}",
-               destinationMacAddressBytes[0], destinationMacAddressBytes[1], destinationMacAddressBytes[2],
-               destinationMacAddressBytes[3], destinationMacAddressBytes[4], destinationMacAddressBytes[5],
-               sourceMacAddressBytes[0], sourceMacAddressBytes[1], sourceMacAddressBytes[2], sourceMacAddressBytes[3],
-               sourceMacAddressBytes[4], sourceMacAddressBytes[5], etherType);
-
-    // Handle VLAN tags if present
-    size_t vlanCount = 0;
-
-    while (
-        (etherType == static_cast<uint16_t>(EtherType::VLAN) || etherType == static_cast<uint16_t>(EtherType::QinQ)) &&
-        vlanCount < MaxVlanTags)
+    else if (etherType == 0x0806) // ARP
     {
-        if (!parse_vlan_header(frameData, frameLength, offset, etherType))
-        {
-            return false;
-        }
-        vlanCount++;
+        Debug::log("Parsing ARP header");
+        parse_arp_header(frame + 14, frameLength - 14);
     }
-
-    if (vlanCount == MaxVlanTags &&
-        (etherType == static_cast<uint16_t>(EtherType::VLAN) || etherType == static_cast<uint16_t>(EtherType::QinQ)))
+    else if (etherType == 0x8100) // VLAN
     {
-        Debug::log("Exceeded maximum VLAN tags.");
-        return false;
+        Debug::log("Parsing VLAN header");
+        parse_vlan_header(frame + 14, frameLength - 14);
     }
-
-    // Determine payload based on EtherType
-    if (etherType == static_cast<uint16_t>(EtherType::ARP))
+    else if (etherType == 0x86DD) // IPv6
     {
-        // ARP
-        return parse_arp_payload(frameData, frameLength, offset);
+        Debug::log("Parsing IPv6 header");
+        parse_ipv6_header(frame + 14, frameLength - 14);
     }
-    else if (etherType == static_cast<uint16_t>(EtherType::IPv6))
+    else if (etherType == 0x88A8) // Double VLAN (Q-in-Q)
     {
-        // IPv6
-        return parse_ipv6_neighbor_discovery(frameData, frameLength, offset);
+        Debug::log("Parsing Double VLAN header (Q-in-Q)");
+        parse_double_vlan_header(frame + 14, frameLength - 14);
     }
     else
     {
-        Debug::log("Unknown EtherType={}", etherType);
-        return false;
+        Debug::log("Unknown EtherType: {}", etherType);
     }
+}
+
+// ============================
+// Ethernet/VLAN
+// ============================
+
+void parse_vlan_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 6)
+    {
+        Debug::log("Frame too short for VLAN header: {}", remainingLength);
+        return; // Not enough length for VLAN header
+    }
+
+    uint16_t tpid;
+    uint16_t tci;
+    uint16_t nextEtherType;
+
+    memcpy(&tpid, remaining, 2);
+    memcpy(&tci, remaining + 2, 2);
+    memcpy(&nextEtherType, remaining + 4, 2);
+
+    tpid = ntohs(tpid);
+    tci = ntohs(tci);
+    nextEtherType = ntohs(nextEtherType);
+
+    uint8_t priority = (tci >> 13) & 0x07; // Extract Priority (3 bits)
+    uint8_t cfi = (tci >> 12) & 0x01;      // Extract CFI/DEI (1 bit)
+    uint16_t vlanId = tci & 0x0FFF;        // Extract VLAN ID (12 bits)
+
+    Debug::log("TPID: {}", tpid);
+    Debug::log("Priority: {}", priority);
+    Debug::log("CFI/DEI: {}", cfi);
+    Debug::log("VLAN ID: {}", vlanId);
+    Debug::log("Next EtherType: {}", nextEtherType);
+
+    if (nextEtherType == 0x8100 || nextEtherType == 0x88A8) // Double VLAN (Q-in-Q)
+    {
+        Debug::log("Parsing double VLAN header (Q-in-Q)");
+        parse_double_vlan_header(remaining + 6, remainingLength - 6);
+    }
+    else if (nextEtherType == 0x0800) // IPv4
+    {
+        Debug::log("Parsing IPv4 header");
+        parse_ipv4_header(remaining + 6, remainingLength - 6);
+    }
+    else if (nextEtherType == 0x0806) // ARP
+    {
+        Debug::log("Parsing ARP header");
+        parse_arp_header(remaining + 6, remainingLength - 6);
+    }
+    else if (nextEtherType == 0x86DD) // IPv6
+    {
+        Debug::log("Parsing IPv6 header");
+        parse_ipv6_header(remaining + 6, remainingLength - 6);
+    }
+    else
+    {
+        Debug::log("Unknown EtherType after VLAN: {}", nextEtherType);
+    }
+}
+
+void parse_double_vlan_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 8)
+    {
+        Debug::log("Frame too short for Double VLAN header: {}", remainingLength);
+        return; // Not enough length for Double VLAN header
+    }
+
+    uint16_t outerTpid;
+    uint16_t outerTci;
+    uint16_t innerTpid;
+    uint16_t innerTci;
+    uint16_t nextEtherType;
+
+    memcpy(&outerTpid, remaining, 2);
+    memcpy(&outerTci, remaining + 2, 2);
+    memcpy(&innerTpid, remaining + 4, 2);
+    memcpy(&innerTci, remaining + 6, 2);
+    memcpy(&nextEtherType, remaining + 8, 2);
+
+    outerTpid = ntohs(outerTpid);
+    outerTci = ntohs(outerTci);
+    innerTpid = ntohs(innerTpid);
+    innerTci = ntohs(innerTci);
+    nextEtherType = ntohs(nextEtherType);
+
+    uint8_t outerPriority = (outerTci >> 13) & 0x07;  // Extract Outer Priority (3 bits)
+    uint8_t outerCfi = (outerTci >> 12) & 0x01;       // Extract Outer CFI/DEI (1 bit)
+    uint16_t outerVlanId = outerTci & 0x0FFF;         // Extract Outer VLAN ID (12 bits)
+    uint8_t innerPriority = (innerTci >> 13) & 0x07;  // Extract Inner Priority (3 bits)
+    uint8_t innerCfi = (innerTci >> 12) & 0x01;       // Extract Inner CFI/DEI (1 bit)
+    uint16_t innerVlanId = innerTci & 0x0FFF;         // Extract Inner VLAN ID (12 bits)
+
+    Debug::log("Outer TPID: {}", outerTpid);
+    Debug::log("Outer Priority: {}", outerPriority);
+    Debug::log("Outer CFI/DEI: {}", outerCfi);
+    Debug::log("Outer VLAN ID: {}", outerVlanId);
+    Debug::log("Inner TPID: {}", innerTpid);
+    Debug::log("Inner Priority: {}", innerPriority);
+    Debug::log("Inner CFI/DEI: {}", innerCfi);
+    Debug::log("Inner VLAN ID: {}", innerVlanId);
+
+    if (nextEtherType == 0x0800) // IPv4
+    {
+        Debug::log("Parsing IPv4 header");
+        parse_ipv4_header(remaining + 10, remainingLength - 10);
+    }
+    else if (nextEtherType == 0x0806) // ARP
+    {
+        Debug::log("Parsing ARP header");
+        parse_arp_header(remaining + 10, remainingLength - 10);
+    }
+    else if (nextEtherType == 0x86DD) // IPv6
+    {
+        Debug::log("Parsing IPv6 header");
+        parse_ipv6_header(remaining + 10, remainingLength - 10);
+    }
+    else
+    {
+        Debug::log("Unknown EtherType after Double VLAN: {}", nextEtherType);
+    }
+}
+
+// ============================
+// Ethernet/Arp
+// ============================
+
+void parse_arp_header(uint8_t *remaining, uint16_t remainingLength)
+{    
+    if (remainingLength < 28) // Minimum ARP header size
+    {
+        Debug::log("Frame too short for ARP header: {}", remainingLength);
+        return; // Not enough length for ARP header
+    }
+
+    uint16_t hardwareType;
+    uint16_t protocolType;
+    uint16_t operation;
+
+    memcpy(&hardwareType, remaining, 2);
+    memcpy(&protocolType, remaining + 2, 2);
+    memcpy(&operation, remaining + 6, 2);
+
+    hardwareType = ntohs(hardwareType);
+    protocolType = ntohs(protocolType);
+    operation = ntohs(operation);
+
+    Debug::log("Hardware Type: {}", hardwareType);
+    Debug::log("Protocol Type: {}", protocolType);
+    Debug::log("Operation: {}", operation);
+
+    if (protocolType == 0x0800) // IPv4
+    {
+        parse_ipv4_arp_header(remaining, remainingLength);
+    }
+    else if (protocolType == 0x86DD) // IPv6
+    {
+        parse_ipv6_arp_header(remaining, remainingLength);
+    }
+    else
+    {
+        Debug::log("Unknown or unsupported protocol type: {}", protocolType);
+    }
+}
+
+void parse_ipv4_arp_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    const uint8_t hardwareAddressLength = 6;
+    const uint8_t protocolAddressLength = 4;
+
+    if (remainingLength < 8 + (2 * hardwareAddressLength) + (2 * protocolAddressLength))
+    {
+        Debug::log("Frame too short for IPv4 ARP data: {}", remainingLength);
+        return;
+    }
+
+    uint8_t senderHardwareAddress[6];
+    uint8_t targetHardwareAddress[6];
+    uint8_t senderIpv4Address[4];
+    uint8_t targetIpv4Address[4];
+
+    memcpy(senderHardwareAddress, remaining + 8, hardwareAddressLength);
+    memcpy(senderIpv4Address, remaining + 8 + hardwareAddressLength, protocolAddressLength);
+    memcpy(targetHardwareAddress, remaining + 8 + hardwareAddressLength + protocolAddressLength, hardwareAddressLength);
+    memcpy(targetIpv4Address, remaining + 8 + (2 * hardwareAddressLength) + protocolAddressLength, protocolAddressLength);
+
+    Debug::log("Sender IPv4 Address: {}.{}.{}.{}",
+               senderIpv4Address[0], senderIpv4Address[1],
+               senderIpv4Address[2], senderIpv4Address[3]);
+    Debug::log("Target IPv4 Address: {}.{}.{}.{}",
+               targetIpv4Address[0], targetIpv4Address[1],
+               targetIpv4Address[2], targetIpv4Address[3]);
+    Debug::log("Sender Hardware Address: {}:{}:{}:{}:{}:{}",
+               senderHardwareAddress[0], senderHardwareAddress[1], senderHardwareAddress[2],
+               senderHardwareAddress[3], senderHardwareAddress[4], senderHardwareAddress[5]);
+    Debug::log("Target Hardware Address: {}:{}:{}:{}:{}:{}",
+               targetHardwareAddress[0], targetHardwareAddress[1], targetHardwareAddress[2],
+               targetHardwareAddress[3], targetHardwareAddress[4], targetHardwareAddress[5]);
+}
+
+void parse_ipv6_arp_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    const uint8_t hardwareAddressLength = 6;
+    const uint8_t protocolAddressLength = 16;
+
+    if (remainingLength < 8 + (2 * hardwareAddressLength) + (2 * protocolAddressLength))
+    {
+        Debug::log("Frame too short for IPv6 ARP data: {}", remainingLength);
+        return;
+    }
+
+    uint8_t senderHardwareAddress[6];
+    uint8_t targetHardwareAddress[6];
+    uint8_t senderIpv6Address[16];
+    uint8_t targetIpv6Address[16];
+
+    memcpy(senderHardwareAddress, remaining + 8, hardwareAddressLength);
+    memcpy(senderIpv6Address, remaining + 8 + hardwareAddressLength, protocolAddressLength);
+    memcpy(targetHardwareAddress, remaining + 8 + hardwareAddressLength + protocolAddressLength, hardwareAddressLength);
+    memcpy(targetIpv6Address, remaining + 8 + (2 * hardwareAddressLength) + protocolAddressLength, protocolAddressLength);
+
+    Debug::log("Sender IPv6 Address: "
+               "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+               senderIpv6Address[0], senderIpv6Address[1], senderIpv6Address[2], senderIpv6Address[3],
+               senderIpv6Address[4], senderIpv6Address[5], senderIpv6Address[6], senderIpv6Address[7],
+               senderIpv6Address[8], senderIpv6Address[9], senderIpv6Address[10], senderIpv6Address[11],
+               senderIpv6Address[12], senderIpv6Address[13], senderIpv6Address[14], senderIpv6Address[15]);
+
+    Debug::log("Target IPv6 Address: "
+               "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+               targetIpv6Address[0], targetIpv6Address[1], targetIpv6Address[2], targetIpv6Address[3],
+               targetIpv6Address[4], targetIpv6Address[5], targetIpv6Address[6], targetIpv6Address[7],
+               targetIpv6Address[8], targetIpv6Address[9], targetIpv6Address[10], targetIpv6Address[11],
+               targetIpv6Address[12], targetIpv6Address[13], targetIpv6Address[14], targetIpv6Address[15]);
+
+    Debug::log("Sender Hardware Address: {}:{}:{}:{}:{}:{}",
+               senderHardwareAddress[0], senderHardwareAddress[1], senderHardwareAddress[2],
+               senderHardwareAddress[3], senderHardwareAddress[4], senderHardwareAddress[5]);
+    Debug::log("Target Hardware Address: {}:{}:{}:{}:{}:{}",
+               targetHardwareAddress[0], targetHardwareAddress[1], targetHardwareAddress[2],
+               targetHardwareAddress[3], targetHardwareAddress[4], targetHardwareAddress[5]);
+}
+
+// ============================
+// Ethernet/IPv4
+// ============================
+
+void parse_ipv4_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 20) // Minimum IPv4 header size
+    {
+        Debug::log("Frame too short for IPv4 header: {}", remainingLength);
+        return;
+    }
+
+    uint8_t versionAndIhl;
+    uint8_t dscpAndEcn;
+    uint16_t totalLength;
+    uint16_t identification;
+    uint16_t flagsAndFragmentOffset;
+    uint8_t ttl;
+    uint8_t protocol;
+    uint16_t headerChecksum;
+    uint8_t sourceIp[4];
+    uint8_t destinationIp[4];
+
+    memcpy(&versionAndIhl, remaining, 1);
+    memcpy(&dscpAndEcn, remaining + 1, 1);
+    memcpy(&totalLength, remaining + 2, 2);
+    memcpy(&identification, remaining + 4, 2);
+    memcpy(&flagsAndFragmentOffset, remaining + 6, 2);
+    memcpy(&ttl, remaining + 8, 1);
+    memcpy(&protocol, remaining + 9, 1);
+    memcpy(&headerChecksum, remaining + 10, 2);
+    memcpy(sourceIp, remaining + 12, 4);
+    memcpy(destinationIp, remaining + 16, 4);
+
+    totalLength = ntohs(totalLength);
+    identification = ntohs(identification);
+    flagsAndFragmentOffset = ntohs(flagsAndFragmentOffset);
+    headerChecksum = ntohs(headerChecksum);
+
+    uint16_t headerLength = (versionAndIhl & 0x0F) * 4;
+
+    Debug::log("IPv4 Header Length: {}", headerLength);
+    Debug::log("IPv4 Total Length: {}", totalLength);
+    Debug::log("Source IP: {}.{}.{}.{}", sourceIp[0], sourceIp[1], sourceIp[2], sourceIp[3]);
+    Debug::log("Destination IP: {}.{}.{}.{}", destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3]);
+    Debug::log("Protocol: {}", protocol);
+
+    if (protocol == 0x06) // TCP
+    {
+        //parse_tcp_header(remaining + headerLength, remainingLength - headerLength);
+    }
+    else if (protocol == 0x11) // UDP
+    {
+        parse_udp_header(remaining + headerLength, remainingLength - headerLength);
+    }
+    else
+    {
+        Debug::log("Unknown protocol in IPv4 header: {}", protocol);
+    }
+}
+
+// ============================
+// Ethernet/IPv6
+// ============================
+
+void parse_ipv6_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 40) // Fixed IPv6 header size
+    {
+        Debug::log("Frame too short for IPv6 header: {}", remainingLength);
+        return;
+    }
+
+    uint8_t versionAndTrafficClass;
+    uint32_t flowLabel;
+    uint16_t payloadLength;
+    uint8_t nextHeader;
+    uint8_t hopLimit;
+    uint8_t sourceIp[16];
+    uint8_t destinationIp[16];
+
+    memcpy(&versionAndTrafficClass, remaining, 1);
+    memcpy(&flowLabel, remaining + 1, 3);
+    memcpy(&payloadLength, remaining + 4, 2);
+    memcpy(&nextHeader, remaining + 6, 1);
+    memcpy(&hopLimit, remaining + 7, 1);
+    memcpy(sourceIp, remaining + 8, 16);
+    memcpy(destinationIp, remaining + 24, 16);
+
+    payloadLength = ntohs(payloadLength);
+
+    Debug::log("IPv6 Payload Length: {}", payloadLength);
+    Debug::log("Source IP: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+               sourceIp[0], sourceIp[1], sourceIp[2], sourceIp[3],
+               sourceIp[4], sourceIp[5], sourceIp[6], sourceIp[7],
+               sourceIp[8], sourceIp[9], sourceIp[10], sourceIp[11],
+               sourceIp[12], sourceIp[13], sourceIp[14], sourceIp[15]);
+    Debug::log("Destination IP: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+               destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3],
+               destinationIp[4], destinationIp[5], destinationIp[6], destinationIp[7],
+               destinationIp[8], destinationIp[9], destinationIp[10], destinationIp[11],
+               destinationIp[12], destinationIp[13], destinationIp[14], destinationIp[15]);
+    Debug::log("Next Header: {}", nextHeader);
+
+    if (nextHeader == 0x06) // TCP
+    {
+        //parse_tcp_header(remaining + 40, remainingLength - 40);
+    }
+    else if (nextHeader == 0x11) // UDP
+    {
+        parse_udp_header(remaining + 40, remainingLength - 40);
+    }
+    else if (nextHeader == 0x3A) // ICMPv6
+    {
+        parse_icmpv6_header(remaining + 40, remainingLength - 40);
+    }
+    else
+    {
+        Debug::log("Unknown next header in IPv6: {}", nextHeader);
+    }
+}
+
+// ============================
+// Ethernet/IPv?/UDP
+// ============================
+
+void parse_udp_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 8) // Minimum UDP header size
+    {
+        Debug::log("Frame too short for UDP header: {}", remainingLength);
+        return;
+    }
+
+    uint16_t sourcePort;
+    uint16_t destinationPort;
+    uint16_t length;
+    uint16_t checksum;
+
+    memcpy(&sourcePort, remaining, 2);
+    memcpy(&destinationPort, remaining + 2, 2);
+    memcpy(&length, remaining + 4, 2);
+    memcpy(&checksum, remaining + 6, 2);
+
+    sourcePort = ntohs(sourcePort);
+    destinationPort = ntohs(destinationPort);
+    length = ntohs(length);
+    checksum = ntohs(checksum);
+
+    Debug::log("UDP Source Port: {}", sourcePort);
+    Debug::log("UDP Destination Port: {}", destinationPort);
+    Debug::log("UDP Length: {}", length);
+    Debug::log("UDP Checksum: {}", checksum);
+
+    if (destinationPort == 546 || sourcePort == 547) // DHCPv6
+    {
+        Debug::log("Parsing DHCPv6 payload");
+        parse_dhcp6_header(remaining + 8, length - 8);
+    }
+    else
+    {
+        Debug::log("Unknown UDP payload, Source Port: {}, Destination Port: {}", sourcePort, destinationPort);
+    }
+}
+
+// ============================
+// Ethernet/IPv?/UDP/DHCP6
+// ============================
+
+void parse_dhcp6_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 4) // Minimum DHCPv6 header size
+    {
+        Debug::log("Frame too short for DHCPv6 header: {}", remainingLength);
+        return;
+    }
+
+    uint8_t messageType;
+    uint32_t transactionId;
+
+    memcpy(&messageType, remaining, 1);
+    memcpy(&transactionId, remaining + 1, 3);
+
+    Debug::log("DHCPv6 Message Type: {}", messageType);
+    Debug::log("DHCPv6 Transaction ID: {}", transactionId);
+}
+
+// ============================
+// Ethernet/IPv6/ICMPv6
+// ============================
+
+void parse_icmpv6_header(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 4)
+    {
+        Debug::log("Frame too short for ICMPv6 header: {}", remainingLength);
+        return;
+    }
+
+    uint8_t type;
+    uint8_t code;
+    uint16_t checksum;
+
+    memcpy(&type, remaining, 1);
+    memcpy(&code, remaining + 1, 1);
+    memcpy(&checksum, remaining + 2, 2);
+
+    checksum = ntohs(checksum);
+
+    Debug::log("ICMPv6 Type: {}", type);
+    Debug::log("ICMPv6 Code: {}", code);
+    Debug::log("ICMPv6 Checksum: {}", checksum);
+
+    // Add specific ICMPv6 message parsing based on type and code
 }
 
 // ============================
@@ -551,10 +589,7 @@ static bool parse_ethernet_header(const uint8_t *frameData, size_t frameLength)
             Debug::log("Frame of {} bytes received. Parse frame.", static_cast<uint32_t>(frame.length));
 
             // Parse the Ethernet frame
-            if (!parse_ethernet_header(frame.buffer, frame.length))
-            {
-                Debug::log("Failed to parse Ethernet frame.");
-            }
+            parse_ethernet_header(frame.buffer, frame.length);            
         }
 
         Timeout timeoutInstance{UnlimitedTimeout};
