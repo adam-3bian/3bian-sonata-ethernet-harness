@@ -46,6 +46,7 @@ void parse_ipv6_header(uint8_t *remaining, uint16_t remainingLength);
 void parse_udp_header(uint8_t *remaining, uint16_t remainingLength);
 void parse_dhcp6_header(uint8_t *remaining, uint16_t remainingLength);
 void parse_icmpv6_header(uint8_t *remaining, uint16_t remainingLength);
+void parse_icmpv6_router_advertisement(uint8_t *remaining, uint16_t remainingLength);
 
 void parse_ethernet_header(uint8_t *frame, uint16_t frameLength)
 {
@@ -394,12 +395,24 @@ void parse_ipv4_header(uint8_t *remaining, uint16_t remainingLength)
     Debug::log("Destination IP: {}.{}.{}.{}", destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3]);
     Debug::log("Protocol: {}", protocol);
 
-    if (protocol == 0x06) // TCP
+    if (protocol == 0x01) // ICMP
     {
+        Debug::log("ICMP Protocol detected.");
+        //parse_icmp_header(remaining + headerLength, remainingLength - headerLength);
+    }
+    else if (protocol == 0x02) // IGMP
+    {
+        Debug::log("IGMP Protocol detected.");
+        //parse_igmp_header(remaining + headerLength, remainingLength - headerLength);
+    }
+    else if (protocol == 0x06) // TCP
+    {
+        Debug::log("TCP Protocol detected.");
         //parse_tcp_header(remaining + headerLength, remainingLength - headerLength);
     }
     else if (protocol == 0x11) // UDP
     {
+        Debug::log("UDP Protocol detected.");
         parse_udp_header(remaining + headerLength, remainingLength - headerLength);
     }
     else
@@ -560,7 +573,53 @@ void parse_icmpv6_header(uint8_t *remaining, uint16_t remainingLength)
     Debug::log("ICMPv6 Code: {}", code);
     Debug::log("ICMPv6 Checksum: {}", checksum);
 
-    // Add specific ICMPv6 message parsing based on type and code
+    if (type == 133) // Router Solicitation
+    {
+        Debug::log("Router Solicitation message received.");
+        //parse_router_solicitation(remaining + 4, remainingLength - 4);
+    }
+    else if (type == 134) // Router Advertisement
+    {
+        Debug::log("Router Advertisement message received.");
+        parse_icmpv6_router_advertisement(remaining + 4, remainingLength - 4);
+    }
+    else
+    {
+        Debug::log("Unhandled ICMPv6 type: {}", type);
+    }
+}
+
+void parse_icmpv6_router_advertisement(uint8_t *remaining, uint16_t remainingLength)
+{
+    if (remainingLength < 16)
+    {
+        Debug::log("Frame too short for Router Advertisement: {}", remainingLength);
+        return;
+    }
+
+    uint8_t curHopLimit;
+    uint8_t flags;
+    uint16_t routerLifetime;
+    uint32_t reachableTime;
+    uint32_t retransTimer;
+
+    memcpy(&curHopLimit, remaining, 1);
+    memcpy(&flags, remaining + 1, 1);
+    memcpy(&routerLifetime, remaining + 2, 2);
+    memcpy(&reachableTime, remaining + 4, 4);
+    memcpy(&retransTimer, remaining + 8, 4);
+
+    routerLifetime = ntohs(routerLifetime);
+    reachableTime = ntohl(reachableTime);
+    retransTimer = ntohl(retransTimer);
+
+    Debug::log("Current Hop Limit: {}", curHopLimit);
+    Debug::log("Flags: 0x{:02x}", flags);
+    Debug::log("Router Lifetime: {} seconds", routerLifetime);
+    Debug::log("Reachable Time: {} ms", reachableTime);
+    Debug::log("Retransmission Timer: {} ms", retransTimer);
+
+    //parse_ra_options(remaining + 16, remainingLength - 16);
 }
 
 // ============================
