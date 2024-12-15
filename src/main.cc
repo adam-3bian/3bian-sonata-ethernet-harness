@@ -391,8 +391,8 @@ void parse_ipv4_header(uint8_t *remaining, uint16_t remainingLength)
 
     Debug::log("IPv4 Header Length: {}", headerLength);
     Debug::log("IPv4 Total Length: {}", totalLength);
-    Debug::log("Source IP: {}.{}.{}.{}", sourceIp[0], sourceIp[1], sourceIp[2], sourceIp[3]);
-    Debug::log("Destination IP: {}.{}.{}.{}", destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3]);
+    Debug::log("Source IPv4 Address: {}.{}.{}.{}", sourceIp[0], sourceIp[1], sourceIp[2], sourceIp[3]);
+    Debug::log("Destination IPv4 Address: {}.{}.{}.{}", destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3]);
     Debug::log("Protocol: {}", protocol);
 
     if (protocol == 0x01) // ICMP
@@ -452,33 +452,40 @@ void parse_ipv6_header(uint8_t *remaining, uint16_t remainingLength)
     payloadLength = ntohs(payloadLength);
 
     Debug::log("IPv6 Payload Length: {}", payloadLength);
-    Debug::log("Source IP: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+    Debug::log("Source IPv6 Address: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
                sourceIp[0], sourceIp[1], sourceIp[2], sourceIp[3],
                sourceIp[4], sourceIp[5], sourceIp[6], sourceIp[7],
                sourceIp[8], sourceIp[9], sourceIp[10], sourceIp[11],
                sourceIp[12], sourceIp[13], sourceIp[14], sourceIp[15]);
-    Debug::log("Destination IP: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+    Debug::log("Destination IPv6 Address: {}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
                destinationIp[0], destinationIp[1], destinationIp[2], destinationIp[3],
                destinationIp[4], destinationIp[5], destinationIp[6], destinationIp[7],
                destinationIp[8], destinationIp[9], destinationIp[10], destinationIp[11],
                destinationIp[12], destinationIp[13], destinationIp[14], destinationIp[15]);
     Debug::log("Next Header: {}", nextHeader);
 
-    if (nextHeader == 0x06) // TCP
+    if (nextHeader == 0x00) // Hop-by-Hop
     {
+        Debug::log("Hop-by-Hop Protocol detected.");
+    }
+    else if (nextHeader == 0x06) // TCP
+    {
+        Debug::log("TCP Protocol detected.");
         //parse_tcp_header(remaining + 40, remainingLength - 40);
     }
     else if (nextHeader == 0x11) // UDP
     {
+        Debug::log("UDP Protocol detected.");
         parse_udp_header(remaining + 40, remainingLength - 40);
     }
     else if (nextHeader == 0x3A) // ICMPv6
     {
+        Debug::log("ICMPv6 Protocol detected.");
         parse_icmpv6_header(remaining + 40, remainingLength - 40);
     }
     else
     {
-        Debug::log("Unknown next header in IPv6: {}", nextHeader);
+        Debug::log("** Unknown next header in IPv6: {}", nextHeader);
     }
 }
 
@@ -582,6 +589,10 @@ void parse_icmpv6_header(uint8_t *remaining, uint16_t remainingLength)
     {
         Debug::log("Router Advertisement message received.");
         parse_icmpv6_router_advertisement(remaining + 4, remainingLength - 4);
+    }
+    else if (type == 135)
+    {
+        Debug::log("Neighbor Solicitation message received.");
     }
     else
     {
