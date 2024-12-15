@@ -16,12 +16,15 @@ Ethernet Header
 │   ├── IGMP Header
 │   └── Unknown Protocol
 ├── IPv6 Header
+│   ├── Hop-by-Hop Header
 │   ├── TCP Header
 │   ├── UDP Header
 │   │   └── DHCPv6 Header
 │   ├── ICMPv6 Header
 │   │   ├── Router Solicitation
-│   │   └── Router Advertisement
+│   │   ├── Router Advertisement
+│   │   ├── Neighbor Solicitation
+│   │   └── Unknown ICMPv6 Type
 │   └── Unknown Next Header
 ├── ARP Header
 │   ├── IPv4 ARP Header
